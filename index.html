@@ -25,11 +25,15 @@
     --done-bg: #e8f9ee;
     --purple: #7c3aed;
     --purple-bg: #f1e9fe;
+
+    /* ألوان مستخرجة من شعار DACT نفسه — الأزرق الغامق (كحلي) بقى خلفية الشاشة الأساسية */
+    --page-bg: #101f3f;
+    --text-on-page: #c3cee6;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    background: var(--surface);
+    background: var(--page-bg);
     color: var(--text);
     font-family:'IBM Plex Sans', sans-serif;
     min-height:100vh;
@@ -80,7 +84,7 @@
     display:flex; align-items:center; gap:10px;
   }
   .id-chip .role{ color:var(--text-dim); font-weight:500; font-size:11.5px; }
-  .id-chip button{ background:none; border:none; color:var(--text-dim); font-size:11px; cursor:pointer; text-decoration:underline; padding:0; }
+  .id-chip button{ background:var(--waiting); border:none; color:#fff; font-size:11px; font-weight:800; cursor:pointer; text-decoration:none; padding:6px 12px; border-radius:8px; }
   .err{ color:var(--waiting); font-size:11.5px; margin-top:6px; }
 
   .crane-picker-wrap{
@@ -103,7 +107,7 @@
   main{ max-width: 1040px; margin: 0 auto; padding: 20px 20px 60px; }
 
   .toolbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
-  .toolbar h2{ font-size:14px; margin:0; color:var(--text-dim); font-weight:700; }
+  .toolbar h2{ font-size:14px; margin:0; color:var(--text-on-page); font-weight:700; }
   .new-btn{
     background: var(--blue); color:#fff; border:none; padding:12px 18px;
     border-radius:12px; font-weight:700; font-size:13px; cursor:pointer;
@@ -111,7 +115,7 @@
     min-height:44px;
   }
 
-  .empty{ text-align:center; color:var(--text-dim); padding:70px 20px; font-size:13.5px; line-height:1.9; }
+  .empty{ text-align:center; color:var(--text-on-page); padding:70px 20px; font-size:13.5px; line-height:1.9; }
 
   .grid{
     display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:14px;
@@ -120,8 +124,9 @@
     background: var(--panel); border-radius:18px; padding:16px;
     box-shadow: 0 2px 10px rgba(20,30,50,0.06);
     border:1.5px solid var(--line);
-    animation: pop .18s ease;
   }
+  /* الأنيميشن بيتحط بس على الكروت الجديدة فعلًا (مش على كل الكروت في كل رندر) — ده اللي كان بيسبب "الرعشة" */
+  .card.new-card{ animation: pop .18s ease; }
   @keyframes pop{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
   .card.st-waiting{ background: var(--waiting-bg); border-color: rgba(224,52,45,0.35); }
   .card.st-inprogress{ background: var(--prog-bg); border-color: rgba(245,158,11,0.35); }
@@ -278,6 +283,8 @@ let historyLog = []; // نسخة دائمة من كل تاسك اتعمل — ب
 let vessels = []; // قائمة المراكب الشغالة دلوقتي — مشتركة بين الكل، D بس يقدر يضيف/يشيل منها
 let myVessel = null; // المركب المختار حاليًا على الجهاز ده (لـ W وقت الإرسال، ولـ D وقت الفلترة)
 let wFilter = 'all'; // الفلتر النشط في شاشة W: all / waiting / inprogress / done
+let mvFilter = 'all'; // نفس فكرة wFilter بس لشاشة M و V: all / waiting / inprogress / done
+let seenCardIds = new Set(); // كل كارت (id) اتعرض قبل كده — عشان الأنيميشن (pop) يشتغل مرة واحدة بس وقت ظهور الكارت لأول مرة، مش في كل رندر
 let preselectedCrane = null; // الكرين اللي اختاره الـ W قبل ما يدخل — بيتكتب تلقائي في أول تاسك
 let isModalOpen = false; // بنأجل الـ re-render وقت ما مودال مفتوح عشان منقفلوش في وشه
 let firestoreReady = false; // بيبقى true لما أول snapshot يوصل من الاتنين
@@ -296,6 +303,12 @@ function validId(v){ return /^[WDMV]\d{4}$/.test(v.toUpperCase()); }
 function fmtTime(ts){ return ts ? new Date(ts).toLocaleString('en-GB', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '—'; }
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent = s==null ? '' : s; return d.innerHTML; }
 function statusLabel(s){ return s==='done' ? 'Done' : s==='inprogress' ? 'In Progress' : 'Waiting'; }
+// بيرجع ' new-card' مرة واحدة بس أول ما الكارت ده يظهر (عشان الأنيميشن ميتكررش على كل الكروت في كل رندر — ده كان سبب "الرعشة")
+function cardAnimClass(id){
+  if(seenCardIds.has(id)) return '';
+  seenCardIds.add(id);
+  return ' new-card';
+}
 
 /* ---------- الشيفت الحالي: Day 7ص-3م / Evening 3م-11م / Night 11م-7ص ---------- */
 // بتاخد أي وقت (timestamp) وترجع اسم الشيفت + تاريخ بداية الشيفت (كـ timestamp) — مستخدمة للبادچ الحي ولتاجّ كل تاسك وقت إنشاءه
@@ -348,7 +361,7 @@ let renderDebounceTimer = null;
 function scheduleRender(){
   if(!myId || isModalOpen) return;
   clearTimeout(renderDebounceTimer);
-  renderDebounceTimer = setTimeout(render, 60);
+  renderDebounceTimer = setTimeout(render, 150); // كانت 60ms — رفعناها شوية عشان تجمع تحديثات tasks+history+vessels اللي بتوصل من الشبكة مش في نفس اللحظة بالظبط، في رندر واحد بس
 }
 
 function attachFirestoreListeners(){
@@ -374,6 +387,10 @@ function attachFirestoreListeners(){
 
 /* ---------- المراكب: D بس يقدر يضيف/يشيل، W وD بيختاروا مركب واحد يتفتكر ليهم على الجهاز ---------- */
 const ALL_VESSELS = '__ALL__'; // قيمة خاصة معناها "كل المراكب مع بعض" — مش اسم مركب حقيقي
+// بيرجع true لو التاسك ده لازم يظهر مع الفلتر الحالي (نفس المنطق اللي كان مستخدم جوه D بس، دلوقتي مشترك لكل الأدوار)
+function vesselMatches(t){
+  return vessels.length < 2 || myVessel === ALL_VESSELS || !t.vessel || t.vessel === myVessel;
+}
 function loadMyVessel(){
   try{ myVessel = localStorage.getItem(MY_VESSEL_KEY) || ALL_VESSELS; }catch(e){ myVessel = ALL_VESSELS; }
 }
@@ -491,6 +508,15 @@ function render(){
     mainArea.innerHTML = `<div class="empty">Enter your ID above to access the board<br><span style="font-size:11.5px;">W#### / D#### / M#### / V####</span></div>`;
     return;
   }
+
+  // بنحفظ أي حقل input كان الشخص بيكتب فيه (زي Position on Arrival) قبل ما نعيد بناء الشاشة كلها،
+  // عشان لو حد تاني عمل أكشن في نفس اللحظة (وده بيحصل عن طريق الـ real-time listeners) الكتابة متتمسحش وميحصلش "قفزة" محسوسة
+  const active = document.activeElement;
+  let focusSnapshot = null;
+  if(active && mainArea.contains(active) && active.id){
+    focusSnapshot = { id: active.id, value: active.value, selStart: active.selectionStart, selEnd: active.selectionEnd };
+  }
+
   if(myRole === 'W') mainArea.innerHTML = renderWView();
   else if(myRole === 'D') mainArea.innerHTML = renderDView();
   else mainArea.innerHTML = renderMVView(); // M و V بنفس الشاشة، الفرق في الأزرار بس
@@ -506,6 +532,9 @@ function render(){
 
   mainArea.querySelectorAll('[data-wfilter]').forEach(btn=>{
     btn.onclick = ()=>{ wFilter = btn.dataset.wfilter; render(); };
+  });
+  mainArea.querySelectorAll('[data-mvfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ mvFilter = btn.dataset.mvfilter; render(); };
   });
 
   mainArea.querySelectorAll('[data-start]').forEach(btn=>{
@@ -538,6 +567,18 @@ function render(){
     const removeVesselSelect = document.getElementById('removeVesselSelect');
     removeVesselBtn.onclick = ()=> removeVessel(removeVesselSelect.value);
   }
+
+  // بعد إعادة البناء، لو كان فيه حقل الشخص بيكتب فيه، نرجّعله نفس القيمة ومكان المؤشر بالظبط
+  if(focusSnapshot){
+    const el = document.getElementById(focusSnapshot.id);
+    if(el){
+      el.value = focusSnapshot.value;
+      el.focus();
+      if(typeof el.setSelectionRange === 'function'){
+        try{ el.setSelectionRange(focusSnapshot.selStart, focusSnapshot.selEnd); }catch(e){}
+      }
+    }
+  }
 }
 
 function statsHtml(list){
@@ -558,7 +599,7 @@ function baseCard(t, opts){
   const cardClass = isWrong ? 'wrongdata' : t.status;
   const badgeText = isWrong ? 'Waiting Edit' : statusLabel(t.status);
   return `
-    <div class="card st-${cardClass}">
+    <div class="card st-${cardClass}${cardAnimClass(t.id)}">
       <div class="card-top">
         <span class="badge">${badgeText}</span>
         <span class="time">${fmtTime(t.createdAt)}</span>
@@ -576,7 +617,7 @@ function baseCard(t, opts){
 }
 
 function renderWView(){
-  const allMine = tasks.filter(t=>t.from===myId);
+  const allMine = tasks.filter(t=>t.from===myId && vesselMatches(t));
   const labels = {all:'All', waiting:'Waiting', inprogress:'In Progress', done:'Done'};
   const counts = {
     all: allMine.length,
@@ -586,6 +627,7 @@ function renderWView(){
   };
   const mine = (wFilter==='all' ? allMine : allMine.filter(t=>t.status===wFilter)).sort((a,b)=> b.createdAt - a.createdAt);
 
+  const vesselChips = renderVesselFilterChips();
   const tabsHtml = `<div class="filter-tabs">${['all','waiting','inprogress','done'].map(f=>
     `<button type="button" class="filter-tab${wFilter===f ? ' active' : ''}" data-wfilter="${f}">${labels[f]} (${counts[f]})</button>`
   ).join('')}</div>`;
@@ -621,7 +663,20 @@ function renderWView(){
       return baseCard(t, {extra: actions});
     }).join('') + `</div>`;
   }
-  return statsHtml(allMine) + tabsHtml + toolbar + cards;
+  return statsHtml(allMine) + vesselChips + tabsHtml + toolbar + cards;
+}
+
+// نسخة مبسطة من إدارة المراكب — للفلترة بس (بدون إضافة/حذف)، مستخدمة في شاشات W و M و V
+// إضافة/حذف المراكب لسه حكرة على D بس، حسب الاتفاق
+function renderVesselFilterChips(){
+  if(vessels.length < 2) return ''; // مفيش داعي للفلتر لو مركب واحد بس أو مفيش مراكب أصلًا
+  const allChip = `<span class="vessel-chip${myVessel===ALL_VESSELS ? ' active' : ''}" data-vessel-select="${ALL_VESSELS}">All Vessels</span>`;
+  const chips = vessels.map(v=>`<span class="vessel-chip${v===myVessel ? ' active' : ''}" data-vessel-select="${escapeHtml(v)}">${escapeHtml(v)}</span>`).join('');
+  return `
+    <div class="vessel-manager">
+      <div class="vessel-manager-label">Filter by vessel</div>
+      <div class="vessel-chips">${allChip}${chips}</div>
+    </div>`;
 }
 
 function renderVesselManager(){
@@ -646,9 +701,8 @@ function renderVesselManager(){
 }
 
 function renderDView(){
-  const vesselFilter = t => vessels.length < 2 || myVessel === ALL_VESSELS || !t.vessel || t.vessel === myVessel;
-  const waiting = tasks.filter(t=>t.status==='waiting' && !t.wrongData && vesselFilter(t)).sort((a,b)=> b.createdAt - a.createdAt);
-  const mineInProgress = tasks.filter(t=>t.status==='inprogress' && t.startedBy===myId && vesselFilter(t)).sort((a,b)=> b.startedAt - a.startedAt);
+  const waiting = tasks.filter(t=>t.status==='waiting' && !t.wrongData && vesselMatches(t)).sort((a,b)=> b.createdAt - a.createdAt);
+  const mineInProgress = tasks.filter(t=>t.status==='inprogress' && t.startedBy===myId && vesselMatches(t)).sort((a,b)=> b.startedAt - a.startedAt);
 
   let out = renderVesselManager();
   out += `<div class="toolbar"><h2>New Tasks (Waiting)</h2></div>`;
@@ -678,17 +732,32 @@ function renderDView(){
 
 function renderMVView(){
   const isM = myRole === 'M';
-  const all = (isM ? historyLog : tasks).slice().sort((a,b)=> b.createdAt - a.createdAt);
+  const all = (isM ? historyLog : tasks).filter(vesselMatches).slice().sort((a,b)=> b.createdAt - a.createdAt);
+
+  // نفس فكرة تابات الفلترة اللي عند W بالظبط (All / Waiting / In Progress / Done)، هنا لـ M و V
+  const labels = {all:'All', waiting:'Waiting', inprogress:'In Progress', done:'Done'};
+  const counts = {
+    all: all.length,
+    waiting: all.filter(t=>t.status==='waiting').length,
+    inprogress: all.filter(t=>t.status==='inprogress').length,
+    done: all.filter(t=>t.status==='done').length
+  };
+  const filtered = (mvFilter==='all' ? all : all.filter(t=>t.status===mvFilter));
+
+  const vesselChips = renderVesselFilterChips();
+  const tabsHtml = `<div class="filter-tabs">${['all','waiting','inprogress','done'].map(f=>
+    `<button type="button" class="filter-tab${mvFilter===f ? ' active' : ''}" data-mvfilter="${f}">${labels[f]} (${counts[f]})</button>`
+  ).join('')}</div>`;
 
   let toolbar = `<div class="toolbar"><h2>${isM ? 'History — All Containers (including deleted)' : 'View Only — All Tasks'}</h2>`;
   if(isM) toolbar += `<button class="new-btn" id="exportBtn">⬇ Export Excel</button>`;
   toolbar += `</div>`;
 
   let cards;
-  if(all.length === 0){
-    cards = `<div class="empty">No tasks recorded</div>`;
+  if(filtered.length === 0){
+    cards = `<div class="empty">${mvFilter==='all' ? 'No tasks recorded' : 'No tasks with this status'}</div>`;
   }else{
-    cards = `<div class="grid">` + all.map(t=>{
+    cards = `<div class="grid">` + filtered.map(t=>{
       let extra = '';
       if(isM){
         if(t.deleted){
@@ -700,7 +769,7 @@ function renderMVView(){
       return baseCard(t, {extra});
     }).join('') + `</div>`;
   }
-  return statsHtml(all.filter(t=>!t.deleted)) + toolbar + cards;
+  return statsHtml(all.filter(t=>!t.deleted)) + vesselChips + tabsHtml + toolbar + cards;
 }
 
 /* ---------- Export (M only) — شيت واحد فيه كل الحاويات: رقم الحاوية / البوزيشن / بوزيشن الوصول ---------- */
