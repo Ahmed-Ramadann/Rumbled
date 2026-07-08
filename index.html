@@ -21,8 +21,10 @@
     --waiting-bg: #fdeceb;
     --prog: #f59e0b;
     --prog-bg: #fef3dd;
+    --prog-text: #b45309; /* لون أغمق من --prog للنص، عشان يفضل واضح فوق خلفية صفرا فاتحة */
     --done: #22c55e;
     --done-bg: #e8f9ee;
+    --done-text: #15803d; /* لون أغمق من --done للنص، عشان يفضل واضح فوق خلفية خضرا فاتحة */
     --purple: #7c3aed;
     --purple-bg: #f1e9fe;
 
@@ -201,9 +203,16 @@
   .stat-box{ background:var(--panel); border:1.5px solid var(--line); border-radius:14px; padding:14px; text-align:center; }
   .stat-box .num{ font-size:24px; font-weight:800; font-family:'IBM Plex Mono',monospace; }
   .stat-box .lbl{ font-size:11px; color:var(--text-dim); font-weight:700; margin-top:4px; }
+  /* نفس ألوان الكروت بالظبط (خلفية فاتحة + نص غامق) — عشان تناسق وميبقاش تباين قوي يتعب العين */
+  .stat-box.waiting{ background: var(--waiting-bg); border-color: rgba(224,52,45,0.3); }
   .stat-box.waiting .num{ color:var(--waiting); }
-  .stat-box.inprogress .num{ color:var(--prog); }
-  .stat-box.done .num{ color:var(--done); }
+  .stat-box.waiting .lbl{ color:var(--waiting); opacity:0.85; }
+  .stat-box.inprogress{ background: var(--prog-bg); border-color: rgba(245,158,11,0.3); }
+  .stat-box.inprogress .num{ color:var(--prog-text); }
+  .stat-box.inprogress .lbl{ color:var(--prog-text); opacity:0.85; }
+  .stat-box.done{ background: var(--done-bg); border-color: rgba(34,197,94,0.3); }
+  .stat-box.done .num{ color:var(--done-text); }
+  .stat-box.done .lbl{ color:var(--done-text); opacity:0.85; }
   @media (max-width: 620px){ .dash-stats{ grid-template-columns:1fr; } }
 
   .role-note{
@@ -229,6 +238,14 @@
     padding:10px 14px; border-radius:999px; font-size:12.5px; font-weight:700; cursor:pointer; min-height:40px;
   }
   .filter-tab.active{ background: var(--blue); border-color:var(--blue); color:#fff; }
+
+  /* تلوين تابات Waiting/In Progress/Done بنفس ألوان الكروت والستاتس بوكس بالظبط — تناسق واحد في كل الشاشة، وميبقاش تباين تعبان للعين */
+  .filter-tab.tab-waiting{ background: var(--waiting-bg); border-color: rgba(224,52,45,0.3); color: var(--waiting); }
+  .filter-tab.tab-inprogress{ background: var(--prog-bg); border-color: rgba(245,158,11,0.3); color: var(--prog-text); }
+  .filter-tab.tab-done{ background: var(--done-bg); border-color: rgba(34,197,94,0.3); color: var(--done-text); }
+  .filter-tab.tab-waiting.active{ background: var(--waiting); border-color: var(--waiting); color:#fff; }
+  .filter-tab.tab-inprogress.active{ background: var(--prog); border-color: var(--prog); color:#fff; }
+  .filter-tab.tab-done.active{ background: var(--done); border-color: var(--done); color:#fff; }
 </style>
 </head>
 <body>
@@ -530,6 +547,9 @@ function render(){
   const deleteAllBtn = document.getElementById('deleteAllBtn');
   if(deleteAllBtn) deleteAllBtn.onclick = ()=> deleteAllTasksInView(wFilter);
 
+  const deleteAllMvBtn = document.getElementById('deleteAllMvBtn');
+  if(deleteAllMvBtn) deleteAllMvBtn.onclick = ()=> deleteAllTasksInMVView(mvFilter);
+
   mainArea.querySelectorAll('[data-wfilter]').forEach(btn=>{
     btn.onclick = ()=>{ wFilter = btn.dataset.wfilter; render(); };
   });
@@ -629,7 +649,7 @@ function renderWView(){
 
   const vesselChips = renderVesselFilterChips();
   const tabsHtml = `<div class="filter-tabs">${['all','waiting','inprogress','done'].map(f=>
-    `<button type="button" class="filter-tab${wFilter===f ? ' active' : ''}" data-wfilter="${f}">${labels[f]} (${counts[f]})</button>`
+    `<button type="button" class="filter-tab${f!=='all' ? ' tab-'+f : ''}${wFilter===f ? ' active' : ''}" data-wfilter="${f}">${labels[f]} (${counts[f]})</button>`
   ).join('')}</div>`;
 
   let toolbar = `
@@ -746,12 +766,17 @@ function renderMVView(){
 
   const vesselChips = renderVesselFilterChips();
   const tabsHtml = `<div class="filter-tabs">${['all','waiting','inprogress','done'].map(f=>
-    `<button type="button" class="filter-tab${mvFilter===f ? ' active' : ''}" data-mvfilter="${f}">${labels[f]} (${counts[f]})</button>`
+    `<button type="button" class="filter-tab${f!=='all' ? ' tab-'+f : ''}${mvFilter===f ? ' active' : ''}" data-mvfilter="${f}">${labels[f]} (${counts[f]})</button>`
   ).join('')}</div>`;
 
-  let toolbar = `<div class="toolbar"><h2>${isM ? 'History — All Containers (including deleted)' : 'View Only — All Tasks'}</h2>`;
-  if(isM) toolbar += `<button class="new-btn" id="exportBtn">⬇ Export Excel</button>`;
-  toolbar += `</div>`;
+  let toolbar = `
+    <div class="toolbar">
+      <h2>${isM ? 'History — All Containers (including deleted)' : 'All Tasks'}</h2>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${isM ? `<button class="new-btn" id="exportBtn">⬇ Export Excel</button>` : ''}
+        <button class="new-btn" id="deleteAllMvBtn" style="background:var(--waiting); box-shadow:none;">Delete All (${labels[mvFilter]})</button>
+      </div>
+    </div>`;
 
   let cards;
   if(filtered.length === 0){
@@ -882,10 +907,13 @@ async function resendTask(id){
   toast('Position fixed — back in D\'s queue ✓');
 }
 
-// بيمسح كل تاسكات W الحالي المعروضة في الفلتر النشط بس (Waiting/In Progress/Done/All) — البيانات تفضل في الـ History
-async function deleteAllTasksInView(filterStatus){
+// بيمسح كل التاسكات الظاهرة حاليًا في شاشة M أو V (حسب فلتر المركب + الحالة النشطين مع بعض) — البيانات تفضل في الـ History
+// على عكس زرار W، هنا مفيش قيد "بتاعتي أنا بس" — M أصلًا يقدر يحذف أي تاسك، وV هنا بقى ليه نفس الصلاحية
+async function deleteAllTasksInMVView(filterStatus){
   const labels = {all:'All', waiting:'Waiting', inprogress:'In Progress', done:'Done'};
-  const toDelete = tasks.filter(t=> t.from===myId && (filterStatus==='all' || t.status===filterStatus));
+  const isM = myRole === 'M';
+  const visible = (isM ? historyLog : tasks).filter(t=> !t.deleted && vesselMatches(t));
+  const toDelete = visible.filter(t=> filterStatus==='all' || t.status===filterStatus);
   if(toDelete.length === 0){ toast('No tasks to delete in this view'); return; }
   if(!confirm(`Delete all ${toDelete.length} task(s) in "${labels[filterStatus]}"? This can't be undone here (but stays in History).`)) return;
   const idsToDelete = new Set(toDelete.map(t=>t.id));
@@ -900,6 +928,7 @@ async function deleteAllTasksInView(filterStatus){
   render();
   toast(`Deleted ${toDelete.length} task(s) ✓ (still saved in History)`);
 }
+
 
 function openNewTaskModal(){
   const bg = document.createElement('div');
