@@ -343,31 +343,39 @@ async function updateHistoryEntry(id, patch){
 }
 
 /* ---------- Real-time listeners: بيحدّثوا الشاشة تلقائي لحظة أي حد تاني يعدّل ---------- */
+let renderDebounceTimer = null;
+// بنجمع أي كذا تحديث سريع من الـ listeners (زي tasks+history مع بعض) في رندر واحد بس عشان الشاشة متهزّش
+function scheduleRender(){
+  if(!myId || isModalOpen) return;
+  clearTimeout(renderDebounceTimer);
+  renderDebounceTimer = setTimeout(render, 60);
+}
+
 function attachFirestoreListeners(){
   tasksDocRef.onSnapshot(snap=>{
     const data = snap.exists ? snap.data() : null;
     tasks = (data && data.list) || [];
     firestoreReady = true;
-    if(myId && !isModalOpen) render();
+    scheduleRender();
   }, err=>{ toast('Database connection error'); });
 
   historyDocRef.onSnapshot(snap=>{
     const data = snap.exists ? snap.data() : null;
     historyLog = (data && data.list) || [];
-    if(myId && !isModalOpen) render();
+    scheduleRender();
   }, err=>{});
 
   vesselsDocRef.onSnapshot(snap=>{
     const data = snap.exists ? snap.data() : null;
     vessels = (data && data.list) || [];
-    if(!myVessel && vessels.length){ myVessel = vessels[0]; } // مفيش اختيار متحفظ لسه؟ ياخد أول مركب في القائمة
-    if(myId && !isModalOpen) render();
+    scheduleRender();
   }, err=>{});
 }
 
 /* ---------- المراكب: D بس يقدر يضيف/يشيل، W وD بيختاروا مركب واحد يتفتكر ليهم على الجهاز ---------- */
+const ALL_VESSELS = '__ALL__'; // قيمة خاصة معناها "كل المراكب مع بعض" — مش اسم مركب حقيقي
 function loadMyVessel(){
-  try{ myVessel = localStorage.getItem(MY_VESSEL_KEY) || null; }catch(e){}
+  try{ myVessel = localStorage.getItem(MY_VESSEL_KEY) || ALL_VESSELS; }catch(e){ myVessel = ALL_VESSELS; }
 }
 function saveMyVessel(name){
   myVessel = name;
@@ -391,7 +399,7 @@ async function removeVessel(name){
   if(!confirm('Remove vessel "' + name + '" from the list?')) return;
   vessels = vessels.filter(v=>v!==name);
   await persistVessels();
-  if(myVessel === name){ myVessel = vessels[0] || null; try{ if(myVessel) localStorage.setItem(MY_VESSEL_KEY, myVessel); }catch(e){} }
+  if(myVessel === name){ saveMyVessel(ALL_VESSELS); }
   render();
   toast('Vessel removed ✓');
 }
@@ -617,13 +625,14 @@ function renderWView(){
 }
 
 function renderVesselManager(){
+  const allChip = `<span class="vessel-chip${myVessel===ALL_VESSELS ? ' active' : ''}" data-vessel-select="${ALL_VESSELS}">All Vessels</span>`;
   const chips = vessels.map(v=>`
     <span class="vessel-chip${v===myVessel ? ' active' : ''}" data-vessel-select="${escapeHtml(v)}">${escapeHtml(v)}</span>`).join('');
   const removeOptions = vessels.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
   return `
     <div class="vessel-manager">
       <div class="vessel-manager-label">Vessels — tap to select which one you're working on</div>
-      <div class="vessel-chips">${chips || '<span style="font-size:12px;color:var(--text-dim);">No vessels yet — add one below</span>'}</div>
+      <div class="vessel-chips">${allChip}${chips || '<span style="font-size:12px;color:var(--text-dim);">No vessels yet — add one below</span>'}</div>
       <div class="vessel-add-row">
         <input type="text" id="newVesselInput" placeholder="Vessel name" />
         <button id="addVesselBtn">+ Add Vessel</button>
@@ -637,7 +646,7 @@ function renderVesselManager(){
 }
 
 function renderDView(){
-  const vesselFilter = t => vessels.length < 2 || !t.vessel || t.vessel === myVessel;
+  const vesselFilter = t => vessels.length < 2 || myVessel === ALL_VESSELS || !t.vessel || t.vessel === myVessel;
   const waiting = tasks.filter(t=>t.status==='waiting' && !t.wrongData && vesselFilter(t)).sort((a,b)=> b.createdAt - a.createdAt);
   const mineInProgress = tasks.filter(t=>t.status==='inprogress' && t.startedBy===myId && vesselFilter(t)).sort((a,b)=> b.startedAt - a.startedAt);
 
@@ -750,6 +759,7 @@ async function startTask(id){
   t.startedAt = Date.now();
   await persistTasks();
   await updateHistoryEntry(id, {positionOnArrival: poa, status:'inprogress', startedBy: myId, startedAt: t.startedAt});
+  render();
   toast('Started ✓');
 }
 
@@ -760,6 +770,7 @@ async function doneTask(id){
   t.doneAt = Date.now();
   await persistTasks();
   await updateHistoryEntry(id, {status:'done', doneAt: t.doneAt});
+  render();
   toast('Task closed ✓');
 }
 
@@ -771,6 +782,7 @@ async function deleteTask(id){
   tasks = tasks.filter(x=>x.id!==id);
   await persistTasks();
   await updateHistoryEntry(id, {deleted:true, deletedAt: Date.now(), lastStatusBeforeDelete: t.status});
+  render();
   toast('Deleted ✓ (still saved in History)');
 }
 
@@ -783,6 +795,7 @@ async function wrongDataTask(id){
   t.wrongAt = Date.now();
   await persistTasks();
   await updateHistoryEntry(id, {wrongData:true, wrongBy: myId, wrongAt: t.wrongAt, hadWrongData:true});
+  render();
   toast('Sent back to ' + t.from + ' to fix the data');
 }
 
@@ -796,6 +809,7 @@ async function resendTask(id){
   t.wrongData = false; t.wrongBy = null; t.wrongAt = null;
   await persistTasks();
   await updateHistoryEntry(id, {position, wrongData:false});
+  render();
   toast('Position fixed — back in D\'s queue ✓');
 }
 
@@ -814,6 +828,7 @@ async function deleteAllTasksInView(filterStatus){
     if(h) Object.assign(h, {deleted:true, deletedAt: now, lastStatusBeforeDelete: t.status});
   });
   await persistHistory();
+  render();
   toast(`Deleted ${toDelete.length} task(s) ✓ (still saved in History)`);
 }
 
