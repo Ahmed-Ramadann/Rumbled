@@ -33,12 +33,14 @@
     --text-on-page: #c3cee6;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0;padding:0;height:100%;}
   body{
     background: var(--page-bg);
     color: var(--text);
     font-family:'IBM Plex Sans', sans-serif;
     min-height:100vh;
+    display:flex;
+    flex-direction:column;
   }
   .mono{ font-family:'IBM Plex Mono', monospace; }
 
@@ -106,7 +108,11 @@
   }
   .crane-chip.active{ background:var(--blue); border-color:var(--blue); color:#fff; }
 
-  main{ max-width: 1040px; margin: 0 auto; padding: 20px 20px 60px; }
+  main{ max-width: 1040px; margin: 0 auto; padding: 20px 20px 60px; width:100%; flex:1; }
+  .site-footer{
+    max-width: 1040px; margin: 0 auto; padding: 16px 20px 28px; width:100%;
+    text-align:center; font-size:11px; color: var(--text-on-page); opacity:0.6; line-height:1.6;
+  }
 
   .toolbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
   .toolbar h2{ font-size:14px; margin:0; color:var(--text-on-page); font-weight:700; }
@@ -249,6 +255,10 @@
 </header>
 
 <main id="mainArea"></main>
+
+<footer class="site-footer">
+  © <span id="footerYear"></span> Damietta Alliance Container Terminals (DACT) — Rumbled. All rights reserved. Unauthorized copying or use is prohibited.
+</footer>
 
 <div id="toast" class="toast"></div>
 
@@ -1031,6 +1041,7 @@ function openNewTaskModal(){
 }
 
 (function init(){
+  document.getElementById('footerYear').textContent = new Date().getFullYear();
   renderShiftBadge();
   setInterval(renderShiftBadge, 60000); // يحدّث كل دقيقة عشان يبان صح لحظة تغيّر الشيفت
   loadMyVessel();
