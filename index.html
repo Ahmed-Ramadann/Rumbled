@@ -294,6 +294,9 @@ const ID_KEY = 'ops-board:my-id'; // ده تفضيل شخصي للجهاز — l
 const PENDING_CRANE_KEY = 'ops-board:pending-crane';
 const MY_VESSEL_KEY = 'ops-board:my-vessel'; // آخر مركب اختاره الشخص من على الجهاز ده — بيفتكره لحد ما يغيّره بنفسه
 
+// PIN زرار "Reset Database" — غيّره هنا لأي رقم تحبه وارفع نسخة جديدة على GitHub، ده كل اللي محتاجه
+const RESET_PIN = '4821';
+
 let myId = null, myRole = null;
 let tasks = [];
 let historyLog = []; // نسخة دائمة من كل تاسك اتعمل — بتفضل موجودة حتى لو التاسك اتحذف
@@ -550,6 +553,9 @@ function render(){
   const deleteAllMvBtn = document.getElementById('deleteAllMvBtn');
   if(deleteAllMvBtn) deleteAllMvBtn.onclick = ()=> deleteAllTasksInMVView(mvFilter);
 
+  const resetDbBtn = document.getElementById('resetDbBtn');
+  if(resetDbBtn) resetDbBtn.onclick = openResetDbModal;
+
   mainArea.querySelectorAll('[data-wfilter]').forEach(btn=>{
     btn.onclick = ()=>{ wFilter = btn.dataset.wfilter; render(); };
   });
@@ -774,6 +780,7 @@ function renderMVView(){
       <h2>${isM ? 'History — All Containers (including deleted)' : 'All Tasks'}</h2>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         ${isM ? `<button class="new-btn" id="exportBtn">⬇ Export Excel</button>` : ''}
+        ${isM ? `<button class="new-btn" id="resetDbBtn" style="background:#7f1d1d; box-shadow:none;">🗑 Reset Database</button>` : ''}
         <button class="new-btn" id="deleteAllMvBtn" style="background:var(--waiting); box-shadow:none;">Delete All (${labels[mvFilter]})</button>
       </div>
     </div>`;
@@ -929,6 +936,56 @@ async function deleteAllTasksInMVView(filterStatus){
   toast(`Deleted ${toDelete.length} task(s) ✓ (still saved in History)`);
 }
 
+// ---------- Reset Database (M بس) — بيمسح كل التاسكات وكل الـ History نهائيًا لكل الناس، محمي برقم PIN ثابت جوه الكود (RESET_PIN فوق) ----------
+// الـ PIN بيتحط يدويًا في Firestore Console (opsBoard/settings → field: resetPin) — مش موجود جوه الكود عشان أحمد بس يقدر يغيّره وقت ما يحب
+function openResetDbModal(){
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal">
+      <h3 style="color:var(--waiting);">⚠ Reset Database</h3>
+      <div style="font-size:11.5px; color:var(--text-dim); margin-bottom:14px; line-height:1.6;">
+        This permanently deletes <b>all tasks and all history</b> for every user. Make sure you've already exported the Excel sheet — this can't be undone.
+      </div>
+      <div class="field"><label>Enter PIN</label><input id="resetPinInput" type="password" inputmode="numeric" class="mono" placeholder="••••" /></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="resetCancelBtn">Cancel</button>
+        <button class="btn-send" id="resetConfirmBtn" style="background:var(--waiting);">Reset Database</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+  isModalOpen = true;
+  const closeModal = ()=>{ isModalOpen = false; bg.remove(); };
+  bg.onclick = (e)=>{ if(e.target===bg) closeModal(); };
+  document.getElementById('resetCancelBtn').onclick = closeModal;
+  const pinInput = document.getElementById('resetPinInput');
+  pinInput.addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('resetConfirmBtn').click(); });
+
+  document.getElementById('resetConfirmBtn').onclick = async ()=>{
+    const entered = pinInput.value.trim();
+    if(!entered){ toast('Enter the PIN first'); return; }
+
+    if(entered !== RESET_PIN){ toast('Wrong PIN'); return; }
+
+    if(!confirm('FINAL CONFIRMATION: this will permanently delete ALL tasks and ALL history for everyone. Continue?')) return;
+
+    closeModal();
+    await resetDatabase();
+  };
+}
+
+async function resetDatabase(){
+  try{
+    await tasksDocRef.set({ list: [], updatedAt: Date.now() });
+    await historyDocRef.set({ list: [], updatedAt: Date.now() });
+    tasks = []; historyLog = [];
+    seenCardIds = new Set(); // نبدأ الأنيميشن من الأول تاني بعد المسح
+    render();
+    toast('Database reset ✓');
+  }catch(e){
+    toast('Reset failed — check your internet connection');
+  }
+}
 
 function openNewTaskModal(){
   const bg = document.createElement('div');
